@@ -120,4 +120,70 @@ catch { }
 | `Spectre.Console` | Rich terminal UI |
 | `Spectre.Console.Cli` | CLI argument parsing |
 | `Microsoft.Extensions.Http` | `HttpClient` factory |
-| `System.Text.Json` | JSON (built-in, prefer over Newtonsoft) |
+| `System.Text.Json` | JSON (built-in, prefer over Newtonsoft) || `OpenTK` | OpenGL, GPU rendering |
+| `OpenTK.GLControl` | WinForms-hosted OpenGL surface (separate package from OpenTK) |
+
+## WinForms Desktop Apps
+
+**Project setup** — target `net9.0-windows` and enable WinForms:
+```xml
+<PropertyGroup>
+  <TargetFramework>net9.0-windows</TargetFramework>
+  <UseWindowsForms>true</UseWindowsForms>
+</PropertyGroup>
+```
+
+**Avoiding control overlap** — always use `TableLayoutPanel` for multi-control forms rather than manual positioning. Absolute coordinates drift between machines and resolutions.
+
+**Two-window pattern** — for stream apps with a control window + display window:
+- `MainForm` owns the controls (folder pickers, sliders, launch button)
+- Second form (`KaleidoscopeForm`, `DisplayForm`, etc.) owns the canvas/animation
+- `MainForm` instantiates and shows the second form; the second form calls `Close()` on itself when done
+
+**Build file lock** — if `dotnet build` fails with "file in use", a previous run of the exe is still alive:
+```powershell
+# Find it
+Get-Process | Where-Object { $_.MainWindowTitle -like "*YourApp*" }
+# Kill it
+Stop-Process -Id <PID> -Force
+```
+
+## GPU Rendering with OpenTK + WinForms
+
+Use two separate packages — they do not share a version:
+```xml
+<PackageReference Include="OpenTK" Version="4.9.4" />
+<PackageReference Include="OpenTK.GLControl" Version="4.0.2" />
+```
+
+Correct namespace for the WinForms control:
+```csharp
+using OpenTK.GLControl;   // NOT OpenTK.WinForms — that doesn't exist
+```
+
+**PixelFormat ambiguity** — both `System.Drawing.Imaging` and `OpenTK.Graphics.OpenGL4` define `PixelFormat`. Qualify explicitly:
+```csharp
+var data = bmp.LockBits(rect, ImageLockMode.ReadOnly,
+    System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+```
+
+**GPU-first with CPU fallback pattern:**
+```csharp
+private bool _gpuActive = false;
+private GLControl? _glControl;
+
+private void InitRenderer()
+{
+    try
+    {
+        _glControl = new GLControl();
+        // ... set up OpenGL
+        _gpuActive = true;
+    }
+    catch (Exception ex)
+    {
+        // Log and fall back to CPU renderer
+        _gpuActive = false;
+    }
+}
+```

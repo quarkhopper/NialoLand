@@ -104,6 +104,25 @@ node_modules/
 # IDE
 .vscode/settings.json
 .idea/
+.vs/
 ```
 
 Do **not** ignore `railway.toml`, `.github/`, or `README.md`.
+
+**`.vs/` is Visual Studio's local file index cache** — it will cause `git add` to fail with "Permission denied" if the project is open. It must be in `.gitignore`.
+
+## End-of-Stream Merge Workflow
+
+At the end of a stream, merge the `live/` branch to `main`:
+
+```powershell
+git checkout main
+git merge live/YYYY-MM-DD-session-name   # fast-forward if no divergence
+git push origin main
+```
+
+If the `.vs/` folder was accidentally staged and causing permission errors:
+```powershell
+git rm -r --cached path/to/.vs/
+# then commit and push
+```
