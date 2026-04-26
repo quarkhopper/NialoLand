@@ -22,6 +22,9 @@
 # VS Code local settings (keep mcp.json and shared settings, ignore personal overrides)
 .vscode/*.log
 
+# Visual Studio local cache (never commit)
+.vs/
+
 # OS junk
 .DS_Store
 Thumbs.db

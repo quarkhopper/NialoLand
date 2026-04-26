@@ -13,6 +13,7 @@
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Windows.Forms;
+using OpenTK.GLControl;
 
 namespace Kaleidoscope;
 
@@ -40,7 +41,13 @@ public class KaleidoscopeForm : Form
 
     // ── UI Controls ───────────────────────────────────────────────────────────
 
-    private Panel _canvas = null!;       // fills the form; OnPaint draws the kaleidoscope here
+    private GLControl? _glControl;
+    private BufferedCanvasPanel _cpuCanvas = null!;
+    private Panel _overlayPanel = null!;
+    private GpuKaleidoscopeRenderer? _gpuRenderer;
+    private bool _gpuActive;
+    private string? _gpuDisabledReason;
+
     private Button _pauseButton = null!;
     private Button _screenshotButton = null!;
     private Button _backButton = null!;
@@ -65,8 +72,10 @@ public class KaleidoscopeForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.Sizable;
 
-        // DoubleBuffered reduces flicker by compositing off-screen before showing.
+        // DoubleBuffered still helps UI overlays while the render surface is updating.
         DoubleBuffered = true;
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+        UpdateStyles();
 
         BuildUI();
         LoadImage(_currentIndex);
@@ -86,18 +95,38 @@ public class KaleidoscopeForm : Form
 
     private void BuildUI()
     {
-        // Canvas panel — fills the whole form, custom painted each frame.
-        _canvas = new Panel
+        _cpuCanvas = new BufferedCanvasPanel
         {
             Dock = DockStyle.Fill,
             BackColor = Color.Black
         };
-        // Setting DoubleBuffered on a Panel requires this sub-class trick via reflection
-        // (WinForms doesn't expose it directly on Panel). We use the form's buffering instead.
-        _canvas.Paint += OnCanvasPaint;
+        _cpuCanvas.Paint += OnCanvasPaint;
+
+        try
+        {
+            _glControl = new GLControl
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.Black
+            };
+
+            _glControl.Load += OnGlLoad;
+            _glControl.Paint += OnGlPaint;
+            _glControl.Resize += OnGlResize;
+            _glControl.Visible = true;
+
+            _gpuActive = true;
+        }
+        catch (Exception ex)
+        {
+            _gpuActive = false;
+            _gpuDisabledReason = ex.Message;
+        }
+
+        _cpuCanvas.Visible = !_gpuActive;
 
         // Overlay panel — sits at the bottom, semi-transparent buttons.
-        var overlay = new Panel
+        _overlayPanel = new Panel
         {
             Dock = DockStyle.Bottom,
             Height = 56,
@@ -129,10 +158,13 @@ public class KaleidoscopeForm : Form
         buttonRow.Controls.Add(_screenshotButton, 1, 0);
         buttonRow.Controls.Add(_backButton, 2, 0);
 
-        overlay.Controls.Add(buttonRow);
+        _overlayPanel.Controls.Add(buttonRow);
 
-        Controls.Add(_canvas);
-        Controls.Add(overlay);
+        if (_glControl is not null)
+            Controls.Add(_glControl);
+
+        Controls.Add(_cpuCanvas);
+        Controls.Add(_overlayPanel);
     }
 
     /// <summary>Creates a styled button for the overlay bar.</summary>
@@ -165,15 +197,92 @@ public class KaleidoscopeForm : Form
 
         // Invalidate() tells WinForms "this control needs repainting" — it will
         // call OnCanvasPaint on the next UI cycle. More efficient than drawing directly.
-        _canvas.Invalidate();
+        if (_gpuActive && _glControl is not null)
+            _glControl.Invalidate();
+        else
+            _cpuCanvas.Invalidate();
     }
 
     private void OnImageTick(object? sender, EventArgs e)
     {
+        if (_isPaused) return;
+
         // Advance to the next image, wrapping around at the end of the list.
         _currentIndex = (_currentIndex + 1) % _imagePaths.Length;
         LoadImage(_currentIndex);
-        _canvas.Invalidate();
+
+        if (_gpuActive && _glControl is not null)
+            _glControl.Invalidate();
+        else
+            _cpuCanvas.Invalidate();
+    }
+
+    private void OnGlLoad(object? sender, EventArgs e)
+    {
+        if (_glControl is null)
+            return;
+
+        try
+        {
+            _glControl.MakeCurrent();
+
+            _gpuRenderer = new GpuKaleidoscopeRenderer();
+            _gpuRenderer.Initialize();
+
+            if (_currentBitmap is not null)
+                _gpuRenderer.SetSourceImage(_currentBitmap);
+
+            _gpuActive = true;
+            _glControl.Visible = true;
+            _cpuCanvas.Visible = false;
+        }
+        catch (Exception ex)
+        {
+            _gpuDisabledReason = ex.Message;
+            SwitchToCpuFallback();
+        }
+    }
+
+    private void OnGlResize(object? sender, EventArgs e)
+    {
+        if (_gpuActive && _glControl is not null)
+            _glControl.Invalidate();
+    }
+
+    private void OnGlPaint(object? sender, PaintEventArgs e)
+    {
+        if (!_gpuActive || _glControl is null || _gpuRenderer is null)
+            return;
+
+        try
+        {
+            _glControl.MakeCurrent();
+            _gpuRenderer.Render(_glControl.ClientSize, _segments, (float)_rotationAngle);
+            _glControl.SwapBuffers();
+        }
+        catch (Exception ex)
+        {
+            _gpuDisabledReason = ex.Message;
+            SwitchToCpuFallback();
+        }
+    }
+
+    private void SwitchToCpuFallback()
+    {
+        _gpuActive = false;
+
+        if (_glControl is not null)
+            _glControl.Visible = false;
+
+        _cpuCanvas.Visible = true;
+        _cpuCanvas.BringToFront();
+        _overlayPanel.BringToFront();
+        _cpuCanvas.Invalidate();
+
+        if (!string.IsNullOrWhiteSpace(_gpuDisabledReason))
+        {
+            Text = "Kaleidoscope — Animation (CPU fallback)";
+        }
     }
 
     // ── Canvas Paint ─────────────────────────────────────────────────────────
@@ -186,16 +295,46 @@ public class KaleidoscopeForm : Form
         // drawing so memory doesn't pile up (30 frames/sec × un-disposed bitmaps
         // would eat RAM very quickly).
         using var frame = KaleidoscopeRenderer.RenderFrame(
-            _currentBitmap, _segments, _rotationAngle, _canvas.Size);
+            _currentBitmap, _segments, _rotationAngle, _cpuCanvas.ClientSize);
 
         e.Graphics.DrawImage(frame, 0, 0);
     }
+
+    private Size CpuCanvasSize => _cpuCanvas.ClientSize;
+
+    private Size RenderSurfaceSize =>
+        _gpuActive && _glControl is not null ? _glControl.ClientSize : CpuCanvasSize;
 
     // ── Button Handlers ───────────────────────────────────────────────────────
 
     private void OnPauseClicked(object? sender, EventArgs e)
     {
-        _isPaused = !_isPaused;
+        SetPaused(!_isPaused, updateButtonState: true);
+    }
+
+    private void SetPaused(bool paused, bool updateButtonState)
+    {
+        _isPaused = paused;
+
+        if (_isPaused)
+        {
+            _animTimer.Stop();
+            _imageTimer.Stop();
+        }
+        else
+        {
+            _animTimer.Start();
+            _imageTimer.Start();
+
+            if (_gpuActive && _glControl is not null)
+                _glControl.Invalidate();
+            else
+                _cpuCanvas.Invalidate();
+        }
+
+        if (!updateButtonState)
+            return;
+
         _pauseButton.Text = _isPaused ? "▶  Resume" : "⏸  Pause";
         _pauseButton.BackColor = _isPaused
             ? Color.FromArgb(60, 110, 60)   // green tint when paused (ready to resume)
@@ -209,7 +348,7 @@ public class KaleidoscopeForm : Form
         // Pause animation briefly while the dialog is open so the image doesn't
         // change out from under us. We'll restart after the dialog closes.
         bool wasPaused = _isPaused;
-        _isPaused = true;
+        SetPaused(true, updateButtonState: false);
 
         using var dialog = new SaveFileDialog
         {
@@ -222,13 +361,23 @@ public class KaleidoscopeForm : Form
 
         if (dialog.ShowDialog() == DialogResult.OK)
         {
-            // Render the current frame at full canvas size and save to disk.
-            using var frame = KaleidoscopeRenderer.RenderFrame(
-                _currentBitmap, _segments, _rotationAngle, _canvas.Size);
-            frame.Save(dialog.FileName, ImageFormat.Png);
+            if (_gpuActive && _glControl is not null && _gpuRenderer is not null)
+            {
+                _glControl.MakeCurrent();
+                using var frame = _gpuRenderer.CaptureCurrentFrame(
+                    _glControl.ClientSize, _segments, (float)_rotationAngle);
+                frame.Save(dialog.FileName, ImageFormat.Png);
+            }
+            else
+            {
+                // Render the current frame at full canvas size and save to disk.
+                using var frame = KaleidoscopeRenderer.RenderFrame(
+                    _currentBitmap, _segments, _rotationAngle, RenderSurfaceSize);
+                frame.Save(dialog.FileName, ImageFormat.Png);
+            }
         }
 
-        _isPaused = wasPaused;
+        SetPaused(wasPaused, updateButtonState: false);
     }
 
     private void OnBackClicked(object? sender, EventArgs e)
@@ -236,6 +385,8 @@ public class KaleidoscopeForm : Form
         // Clean up timers and bitmaps before closing.
         _animTimer.Stop();
         _imageTimer.Stop();
+        _gpuRenderer?.Dispose();
+        _gpuRenderer = null;
         _currentBitmap?.Dispose();
         _currentBitmap = null;
 
@@ -257,6 +408,12 @@ public class KaleidoscopeForm : Form
             // file handle is released immediately (Bitmap.FromFile keeps the file locked).
             using var img = Image.FromFile(_imagePaths[index]);
             _currentBitmap = new Bitmap(img);
+
+            if (_gpuActive && _gpuRenderer is not null && _glControl is not null)
+            {
+                _glControl.MakeCurrent();
+                _gpuRenderer.SetSourceImage(_currentBitmap);
+            }
         }
         catch
         {
@@ -278,8 +435,29 @@ public class KaleidoscopeForm : Form
         {
             _animTimer.Dispose();
             _imageTimer.Dispose();
+            _gpuRenderer?.Dispose();
+            _glControl?.Dispose();
             _currentBitmap?.Dispose();
         }
         base.Dispose(disposing);
+    }
+
+    // A custom panel that uses full buffering and skips background clears.
+    // This avoids the black flash/flicker when resizing large animation windows.
+    private sealed class BufferedCanvasPanel : Panel
+    {
+        public BufferedCanvasPanel()
+        {
+            DoubleBuffered = true;
+            ResizeRedraw = true;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            UpdateStyles();
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            // Intentionally blank to prevent a separate background erase pass.
+            // The frame renderer paints every pixel anyway.
+        }
     }
 }
