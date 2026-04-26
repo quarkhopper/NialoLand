@@ -1,0 +1,68 @@
+# config.toml — your personal preferences
+#
+# This file controls how your shock sessions work. Safe to put real values here
+# because it's listed in .gitignore and won't be uploaded to GitHub.
+#
+# HOW TO USE:
+#   1. Copy this file: copy config.toml.example config.toml  (Windows)
+#                      cp config.toml.example config.toml    (Mac/Linux)
+#   2. Adjust the values below to match your preferences
+#   3. Save it — the app reads it automatically
+#
+# TIP: All of these can also be overridden on the command line.
+#   e.g. python cli.py shock-button --max-intensity 50
+#   The command line takes priority over this file.
+
+
+[shock_button]
+# Maximum intensity the viewer can choose, as a percentage (1–100).
+# The viewer sees a slider that goes from 1% up to this number.
+# YOU control the ceiling. They pick within it.
+#
+# Suggestion for first stream: start at 20–30. You can always increase it live.
+max_intensity = 30
+
+# How long the shock lasts, in milliseconds.
+# 1000 ms = 1 second. PiShock's maximum is 15000 ms (15 seconds).
+# This is hidden from the viewer — they only control intensity, not duration.
+duration = 3000
+
+# How many seconds the button stays live before auto-expiring if no viewer claims it.
+# 0 means it never expires on its own (you'd have to press a key to cancel).
+timeout = 120
+
+# The text shown as the heading on the viewer's page.
+label = "Shock Button"
+
+# An optional image shown on the viewer page above the controls.
+# Leave this empty for no image.
+# To use your own image: put it in server/static/ and set this to "/static/filename.png"
+image_url = ""
+
+
+[obs]
+# OBS integration is optional. If you don't use OBS, you can leave this section as-is
+# and just never enable WebSocket in OBS. The app degrades gracefully — it will print
+# "OBS not available" once and then continue normally.
+#
+# HOW TO ENABLE OBS OVERLAYS:
+#   1. In OBS: Tools → WebSocket Server Settings → check "Enable WebSocket Server"
+#   2. Set a password (any password you like)
+#   3. Fill in that password below
+#   4. Make sure the scene name below matches your OBS scene exactly
+#   5. Create sources in that scene with the exact names listed below (hidden by default)
+
+host     = "localhost"   # OBS is on the same machine, so this stays as localhost
+port     = 4455          # OBS WebSocket default port — don't change unless you changed it in OBS
+password = "change_me"   # must match what you set in OBS WebSocket settings
+
+# The name of the scene in OBS where your overlay sources live
+# (must match exactly, including capitalisation)
+scene = "Main"
+
+# The names of OBS sources the app will show/hide automatically.
+# Create these as hidden sources in your OBS scene.
+# You can rename them — just update these values to match.
+armed_source   = "Shock Armed"    # shown while the button is live and waiting for a viewer
+claimed_source = "Shock Claimed"  # shown while a viewer has grabbed the control but not yet confirmed
+shock_source   = "Shock Alert"    # shown during the actual shock

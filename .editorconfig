@@ -1,0 +1,45 @@
+root = true
+
+# All files
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = crlf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# C# files
+[*.cs]
+indent_size = 4
+
+# Use file-scoped namespaces (NialoLand style)
+csharp_style_namespace_declarations = file_scoped:warning
+
+# Prefer var when type is obvious
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = false:suggestion
+
+# Prefer expression bodies for simple members
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties = true:suggestion
+
+# Prefer top-level statements (less boilerplate on stream)
+csharp_style_prefer_top_level_statements = true:suggestion
+
+# Naming — PascalCase for public members
+dotnet_naming_rule.public_members_pascal_case.symbols = public_symbols
+dotnet_naming_rule.public_members_pascal_case.style = pascal_case_style
+dotnet_naming_rule.public_members_pascal_case.severity = warning
+dotnet_naming_symbols.public_symbols.applicable_kinds = property,method,field,event,delegate
+dotnet_naming_symbols.public_symbols.applicable_accessibilities = public
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
+# JSON / YAML / TOML
+[*.{json,yml,yaml,toml}]
+indent_size = 2
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false

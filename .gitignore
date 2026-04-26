@@ -1,0 +1,27 @@
+# Downloaded tool binaries — each dev downloads their own via the instructions in mcp.json
+.tools/
+
+# .NET build output
+**/bin/
+**/obj/
+
+# Python virtual environments
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.pyc
+
+# Node
+**/node_modules/
+
+# Environment / secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+
+# VS Code local settings (keep mcp.json and shared settings, ignore personal overrides)
+.vscode/*.log
+
+# OS junk
+.DS_Store
+Thumbs.db

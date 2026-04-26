@@ -1,0 +1,5 @@
+click>=8.0
+python-dotenv>=1.0
+requests>=2.32
+tomli>=2.0; python_version < "3.11"
+obsws-python>=1.7

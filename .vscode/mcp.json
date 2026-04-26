@@ -1,0 +1,36 @@
+{
+  // MCP (Model Context Protocol) servers for GitHub Copilot agent tools.
+  // These give Copilot the ability to interact with GitHub APIs directly —
+  // creating issues, PRs, branches, searching code, and more.
+  //
+  // Docs: https://code.visualstudio.com/docs/copilot/chat/mcp-servers
+  "servers": {
+
+    // Official GitHub MCP server v1.0.3 — full GitHub API surface.
+    // Binary lives in .tools/ (gitignored). Re-download with:
+    //   Invoke-WebRequest https://github.com/github/github-mcp-server/releases/download/v1.0.3/github-mcp-server_Windows_x86_64.zip -OutFile .tools\gh-mcp.zip; Expand-Archive .tools\gh-mcp.zip .tools -Force; Remove-Item .tools\gh-mcp.zip
+    //
+    // Token needs: repo, read:org, read:user scopes (classic)
+    //   or: contents, issues, pull_requests, metadata (fine-grained)
+    "github": {
+      "command": "${workspaceFolder}/.tools/github-mcp-server.exe",
+      // Toolsets enabled for stream support:
+      //   context       — active repo/user context
+      //   copilot       — Copilot-specific tools
+      //   issues        — create, list, comment on issues
+      //   pull_requests — open, review, merge PRs
+      //   repos         — search, browse files, manage repo
+      //   users         — look up user info
+      //   actions       — trigger/monitor workflows (CI visibility on stream)
+      //   git           — commit history, branches, tags
+      // To enable everything: --toolsets=all
+      "args": ["stdio", "--toolsets=default,actions,git,notifications"],
+      "env": {
+        // Reads from the GITHUB_TOKEN env var set on this machine.
+        // Never paste a token value here directly — keep it in the shell env.
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${env:GITHUB_TOKEN}"
+      }
+    }
+
+  }
+}

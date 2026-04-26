@@ -1,0 +1,32 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		// C# / .NET settings
+		"dotnet.defaultSolution": "disable",
+		"csharp.format.enable": true,
+		"editor.formatOnSave": true,
+		"editor.formatOnType": true,
+
+		// Use file-scoped namespaces (matches NialoLand style)
+		"csharp.inlayHints.enableInlayHintsForParameters": true,
+		"csharp.inlayHints.enableInlayHintsForLiteralParameters": true,
+
+		// Keep test explorer tidy (no tests by default in NialoLand)
+		"dotnet.unitTests.runSettingsPath": "",
+
+		// File nesting for .NET project files
+		"explorer.fileNesting.enabled": true,
+		"explorer.fileNesting.patterns": {
+			"*.csproj": "*.user, *.props",
+			"*.sln": "*.slnx, .editorconfig, global.json, Directory.Build.props, Directory.Packages.props",
+			"appsettings.json": "appsettings.*.json"
+		},
+
+		// Terminal — use PowerShell
+		"terminal.integrated.defaultProfile.windows": "PowerShell"
+	}
+}
