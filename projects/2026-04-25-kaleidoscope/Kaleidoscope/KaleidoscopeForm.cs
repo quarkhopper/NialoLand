@@ -27,6 +27,7 @@ public class KaleidoscopeForm : Form
     private readonly double _speedStep;      // radians added per animation frame
 
     private int _currentIndex = 0;          // which image we're currently displaying
+    private readonly Random _rng = new();    // used to pick the next image at random
     private Bitmap? _currentBitmap;         // the loaded source image (disposed on cycle)
     private double _rotationAngle = 0.0;    // current rotation in radians; grows each frame
     private bool _isPaused = false;         // whether animation is frozen
@@ -207,8 +208,14 @@ public class KaleidoscopeForm : Form
     {
         if (_isPaused) return;
 
-        // Advance to the next image, wrapping around at the end of the list.
-        _currentIndex = (_currentIndex + 1) % _imagePaths.Length;
+        // Pick a random image, avoiding the one we're already showing.
+        // If there's only one image, this is a no-op.
+        if (_imagePaths.Length > 1)
+        {
+            int next;
+            do { next = _rng.Next(_imagePaths.Length); } while (next == _currentIndex);
+            _currentIndex = next;
+        }
         LoadImage(_currentIndex);
 
         if (_gpuActive && _glControl is not null)
